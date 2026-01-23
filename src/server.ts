@@ -2,6 +2,7 @@ import express, { type Request } from 'express';
 import type { Logger } from 'pino';
 
 import { healthRouter } from './routes/health';
+import { privacyRouter } from './routes/privacy';
 import { createWhatsappRouter } from './routes/whatsapp';
 import { errorHandler } from './middlewares/errorHandler';
 
@@ -24,6 +25,7 @@ export function createServer({ logger }: CreateServerOptions) {
 
   app.get('/', (_req, res) => res.redirect('/health'));
   app.use('/health', healthRouter);
+  app.use('/privacy', privacyRouter);
   app.use('/webhooks/whatsapp', createWhatsappRouter(logger.child({ scope: 'whatsapp-webhook' })));
 
   app.use((_req, res) => {
