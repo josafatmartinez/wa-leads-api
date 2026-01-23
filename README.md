@@ -88,6 +88,7 @@ docker run -p 3000:3000 --env-file .env wa-leads-api
 ### Endpoints
 
 - `GET /health` — simple healthcheck.
+- `GET /privacy` — aviso de privacidad en texto plano.
 - `GET /webhooks/whatsapp` — handshake de verificación (meta).
 - `POST /webhooks/whatsapp` — recibe mensajes entrantes, procesa y responde.
 
