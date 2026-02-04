@@ -264,6 +264,44 @@ paths:
         '500':
           description: Error interno
     put:
+  /api/tenants/{tenantId}/members/{memberId}/password:
+    post:
+      summary: Resets or sets a member password
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: memberId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantMemberPasswordRequest'
+      responses:
+        '200':
+          description: Password actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantUserResponse'
+        '400':
+          description: Payload inválido
+        '403':
+          description: Solo tenant_admin puede usar este endpoint
+        '404':
+          description: Miembro no encontrado
+        '500':
+          description: Error interno
+
       summary: Crea o actualiza el árbol conversacional del tenant
       security:
         - bearerAuth: []
@@ -670,3 +708,11 @@ components:
       required:
         - supabaseUserId
         - role
+    TenantMemberPasswordRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          minLength: 8
+      required:
+        - password

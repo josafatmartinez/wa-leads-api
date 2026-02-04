@@ -111,6 +111,7 @@ docker run -p 3000:3000 --env-file .env wa-leads-api
 - `POST /webhooks/whatsapp` — recibe mensajes entrantes, procesa y responde.
 - `GET /api/tenants/:tenantId/members` — lista miembros del tenant (requiere `tenant_admin`/`agent`).
 - `POST /api/tenants/:tenantId/members` — agrega o actualiza miembros con roles (`tenant_admin|agent|viewer`).
+- `POST /api/tenants/:tenantId/members/:memberId/password` — establece o reinicia la contraseña de un miembro (requiere `tenant_admin`).
 
 ### Roles
 

@@ -22,6 +22,7 @@ import {
 import { requireSupabaseAuth, type SupabaseAuthenticatedRequest } from '../middlewares/supabaseAuth';
 import { tenantTreeSchema } from '../lib/tenantTree';
 import { z } from 'zod';
+import { getSupabaseAdmin } from '../lib/supabaseAdmin';
 
 export const protectedRouter = Router();
 
@@ -228,6 +229,10 @@ const tenantMemberSchema = z.object({
   role: z.enum(TENANT_USER_ROLES),
 });
 
+const passwordSchema = z.object({
+  password: z.string().min(8),
+});
+
 async function requireTenantRole(
   req: SupabaseAuthenticatedRequest,
   res: Response,
@@ -298,11 +303,57 @@ protectedRouter.post('/tenants/:tenantId/members', async (req: Request<{ tenantI
     role: parsed.data.role,
   };
 
-  try {
-    const member = await upsertTenantUser(payload);
-    res.status(201).json({ ok: true, data: { member } });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'could not upsert member';
-    res.status(500).json({ ok: false, error: { message } });
-  }
-});
+    try {
+      const member = await upsertTenantUser(payload);
+      res.status(201).json({ ok: true, data: { member } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'could not upsert member';
+      res.status(500).json({ ok: false, error: { message } });
+    }
+  });
+
+protectedRouter.post(
+  '/tenants/:tenantId/members/:memberId/password',
+  async (req: Request<{ tenantId: string; memberId: string }>, res: Response) => {
+    const tenantId = req.params.tenantId;
+    const memberId = req.params.memberId;
+    const membership = await requireTenantRole(
+      toAuthRequest(req),
+      res,
+      tenantId,
+      ['tenant_admin'] as TenantUserRole[],
+    );
+    if (!membership) return;
+
+    const target = await getTenantUser(tenantId, memberId);
+    if (!target) {
+      res.status(404).json({ ok: false, error: { message: 'member not found' } });
+      return;
+    }
+
+    const parsed = passwordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        ok: false,
+        error: { message: 'invalid payload', issues: parsed.error.format() },
+      });
+      return;
+    }
+
+    try {
+      const supabase = await getSupabaseAdmin();
+      const { error } = await supabase.auth.admin.updateUserById(memberId, {
+        password: parsed.data.password,
+      });
+      if (error) {
+        res.status(500).json({ ok: false, error: { message: error.message } });
+        return;
+      }
+
+      res.json({ ok: true, data: { member: target } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'could not update password';
+      res.status(500).json({ ok: false, error: { message } });
+    }
+  },
+);
