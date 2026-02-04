@@ -126,16 +126,16 @@ paths:
         '500':
           description: Error interno
   /api/tenants/{tenantId}/whatsapp:
-    parameters:
-      - in: path
-        name: tenantId
-        required: true
-        schema:
-          type: string
     get:
       summary: Regresa la información registrada de WhatsApp por tenant
       security:
         - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: Credenciales del tenant
@@ -149,6 +149,12 @@ paths:
       summary: Crea o actualiza las credenciales de WhatsApp del tenant
       security:
         - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -212,6 +218,33 @@ paths:
           description: Árbol no encontrado
         '500':
           description: Error interno
+    put:
+      summary: Crea o actualiza el árbol conversacional del tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantTreeCreateRequest'
+      responses:
+        '200':
+          description: Árbol guardado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantTreeResponse'
+        '400':
+          description: Payload inválido
+        '500':
+          description: Error interno
   /api/tenants/{tenantId}/members:
     get:
       summary: Lista a los miembros asociados al tenant
@@ -263,7 +296,6 @@ paths:
           description: No autorizado (solo tenant_admin)
         '500':
           description: Error interno
-    put:
   /api/tenants/{tenantId}/members/{memberId}/password:
     post:
       summary: Resets or sets a member password
@@ -299,33 +331,6 @@ paths:
           description: Solo tenant_admin puede usar este endpoint
         '404':
           description: Miembro no encontrado
-        '500':
-          description: Error interno
-
-      summary: Crea o actualiza el árbol conversacional del tenant
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: tenantId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TenantTreeCreateRequest'
-      responses:
-        '200':
-          description: Árbol guardado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TenantTreeResponse'
-        '400':
-          description: Payload inválido
         '500':
           description: Error interno
   /webhooks/whatsapp:
