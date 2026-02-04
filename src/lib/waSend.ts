@@ -15,6 +15,13 @@ type Button = { id: string; title: string };
 type ListRow = { id: string; title: string; description?: string };
 type ListSection = { title: string; rows: ListRow[] };
 
+function normalizeWhatsappRecipient(phone: string) {
+  if (phone.startsWith('521') && phone.length > 3) {
+    return `52${phone.slice(3)}`;
+  }
+  return phone;
+}
+
 async function postMessage(
   input: Pick<BaseSendInput, 'phoneNumberId' | 'accessToken' | 'version'>,
   payload: unknown,
@@ -46,18 +53,20 @@ async function postMessage(
 }
 
 export async function sendText(input: BaseSendInput): Promise<unknown> {
+  const normalizedTo = normalizeWhatsappRecipient(input.to);
   return postMessage(input, {
     messaging_product: 'whatsapp',
-    to: input.to,
+    to: normalizedTo,
     type: 'text',
     text: { body: input.text },
   });
 }
 
 export async function sendButtons(input: BaseSendInput & { buttons: Button[] }): Promise<unknown> {
+  const normalizedTo = normalizeWhatsappRecipient(input.to);
   return postMessage(input, {
     messaging_product: 'whatsapp',
-    to: input.to,
+    to: normalizedTo,
     type: 'interactive',
     interactive: {
       type: 'button',
@@ -75,9 +84,10 @@ export async function sendButtons(input: BaseSendInput & { buttons: Button[] }):
 export async function sendList(
   input: BaseSendInput & { buttonText: string; sections: ListSection[] },
 ): Promise<unknown> {
+  const normalizedTo = normalizeWhatsappRecipient(input.to);
   return postMessage(input, {
     messaging_product: 'whatsapp',
-    to: input.to,
+    to: normalizedTo,
     type: 'interactive',
     interactive: {
       type: 'list',
