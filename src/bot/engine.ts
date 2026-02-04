@@ -1,7 +1,7 @@
-import { TREE, type Node, type NodeKey, type ResponseAction } from './tree';
+import { TREE, type Node, type ResponseAction, type TreeDefinition } from './tree';
 
 type ConversationState = {
-  currentNodeKey?: NodeKey;
+  currentNodeKey?: string;
   answers?: Record<string, string>;
 };
 
@@ -26,10 +26,11 @@ export type InboundMessage =
 export type ProcessInboundInput = {
   conversation: ConversationState;
   inboundMessage: InboundMessage;
+  tree?: TreeDefinition;
 };
 
 export type ProcessInboundOutput = {
-  nextNodeKey: NodeKey;
+  nextNodeKey: string;
   updatedAnswers: Record<string, string>;
   responseAction: ResponseAction;
   shouldHandoff: boolean;
@@ -87,33 +88,43 @@ function matchOption(node: Node, answer: string) {
   );
 }
 
+function resolveNodeKey(nodes: Record<string, Node>, candidate?: string): string {
+  if (candidate && nodes[candidate]) return candidate;
+  if (nodes.start) return 'start';
+  const first = Object.keys(nodes)[0];
+  return first ?? 'start';
+}
+
 export function processInbound({
   conversation,
   inboundMessage,
+  tree,
 }: ProcessInboundInput): ProcessInboundOutput {
-  const currentNodeKey: NodeKey = conversation.currentNodeKey ?? 'start';
-  const currentNode = TREE.nodes[currentNodeKey];
+  const nodes = tree?.nodes ?? TREE.nodes;
+  const fallbackKey = resolveNodeKey(nodes, 'start');
+  const currentNodeKey = resolveNodeKey(nodes, conversation.currentNodeKey ?? fallbackKey);
+  const currentNode = nodes[currentNodeKey] ?? nodes[fallbackKey];
 
   const updatedAnswers: Record<string, string> = { ...(conversation.answers ?? {}) };
   const answer = parseInboundAnswer(inboundMessage);
 
-  if (currentNode.type === 'end') {
-    const node = TREE.nodes.start;
+  const startNode = nodes[fallbackKey] ?? nodes[currentNodeKey];
+
+  if (currentNode?.type === 'end') {
     return {
-      nextNodeKey: 'start',
+      nextNodeKey: fallbackKey,
       updatedAnswers,
-      responseAction: buildResponseAction(node),
+      responseAction: buildResponseAction(startNode),
       shouldHandoff: false,
     };
   }
 
   if (!answer) {
-    const node = TREE.nodes.start;
-    if (currentNodeKey === 'start') {
+    if (currentNodeKey === fallbackKey) {
       return {
-        nextNodeKey: 'start',
+        nextNodeKey: fallbackKey,
         updatedAnswers,
-        responseAction: buildResponseAction(node),
+        responseAction: buildResponseAction(startNode),
         shouldHandoff: false,
       };
     }
@@ -126,24 +137,23 @@ export function processInbound({
     };
   }
 
-  if (currentNode.saveAs) updatedAnswers[currentNode.saveAs] = answer;
+  if (currentNode?.saveAs) updatedAnswers[currentNode.saveAs] = answer;
 
-  let nextNodeKey: NodeKey | undefined;
+  let nextNodeKey: string | undefined;
 
-  if (currentNode.type === 'text') {
+  if (currentNode?.type === 'text') {
     nextNodeKey = currentNode.next;
-  } else if (currentNode.type === 'list' || currentNode.type === 'buttons') {
+  } else if (currentNode?.type === 'list' || currentNode?.type === 'buttons') {
     const opt = matchOption(currentNode, answer);
     if (opt) nextNodeKey = opt.next;
   }
 
   if (!nextNodeKey) {
-    if (currentNodeKey === 'start') {
-      const node = TREE.nodes.start;
+    if (currentNodeKey === fallbackKey) {
       return {
-        nextNodeKey: 'start',
+        nextNodeKey: fallbackKey,
         updatedAnswers,
-        responseAction: buildResponseAction(node),
+        responseAction: buildResponseAction(startNode),
         shouldHandoff: false,
       };
     }
@@ -156,7 +166,7 @@ export function processInbound({
     };
   }
 
-  const nextNode = TREE.nodes[nextNodeKey];
+  const nextNode = nodes[nextNodeKey] ?? startNode;
   return {
     nextNodeKey,
     updatedAnswers,

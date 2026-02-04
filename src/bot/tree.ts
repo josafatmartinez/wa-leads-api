@@ -1,9 +1,7 @@
-export type NodeKey = 'start' | 'date' | 'city' | 'budget' | 'done';
-
 export type Option = {
   id: string;
   title: string;
-  next: NodeKey;
+  next: string;
 };
 
 export type BaseNode = {
@@ -23,7 +21,7 @@ export type ButtonsNode = BaseNode & {
 
 export type TextNode = BaseNode & {
   type: 'text';
-  next: NodeKey;
+  next: string;
 };
 
 export type EndNode = BaseNode & {
@@ -32,12 +30,8 @@ export type EndNode = BaseNode & {
 
 export type Node = ListNode | ButtonsNode | TextNode | EndNode;
 
-export type Tree = {
-  start: Node;
-  date: Node;
-  city: Node;
-  budget: Node;
-  done: Node;
+export type TreeDefinition = {
+  nodes: Record<string, Node>;
 };
 
 export type ResponseAction =
@@ -46,7 +40,7 @@ export type ResponseAction =
   | { type: 'buttons'; body: string; options: Array<Pick<Option, 'id' | 'title'>> }
   | { type: 'end'; body: string };
 
-export const TREE: { nodes: Tree } = {
+export const TREE: TreeDefinition = {
   nodes: {
     start: {
       type: 'list',
