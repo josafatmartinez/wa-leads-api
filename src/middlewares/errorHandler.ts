@@ -1,9 +1,9 @@
-import type { ErrorRequestHandler } from 'express';
+import type { ErrorRequestHandler, NextFunction, Request, Response } from 'express';
 import type { Logger } from 'pino';
 import { ZodError } from 'zod';
 
 export function errorHandler(logger: Logger): ErrorRequestHandler {
-  return (err, _req, res, _next) => {
+  return (err: Error, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ZodError) {
       res.status(400).json({ ok: false, error: { message: 'Bad Request', issues: err.issues } });
       return;

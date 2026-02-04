@@ -165,7 +165,7 @@ protectedRouter.post('/tenants/:tenantId/whatsapp', async (req: Request<{ tenant
 
 protectedRouter
   .route('/tenants/:tenantId/tree')
-  .get(async (req, res) => {
+  .get(async (req: Request<{ tenantId: string }>, res: Response) => {
     const tenantId = req.params.tenantId;
     const membership = await requireTenantRole(
       toAuthRequest(req),
@@ -186,7 +186,7 @@ protectedRouter
       res.status(500).json({ ok: false, error: { message } });
     }
   })
-  .put(async (req, res) => {
+  .put(async (req: Request<{ tenantId: string }>, res: Response) => {
     const tenantId = req.params.tenantId;
     const membership = await requireTenantRole(
       toAuthRequest(req),
