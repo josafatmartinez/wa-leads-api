@@ -9,14 +9,16 @@ import { buildLeadSlug, ensureUniqueSlug } from '../lib/slug';
 import { sendButtons, sendList, sendText } from '../lib/waSend';
 import {
   findTenantByPhoneNumberId,
+  findTenantByVerifyToken,
   getConversation,
+  getTenantTree,
   isDuplicateMessage,
   markMessageProcessed,
   upsertConversation,
   updateConversation,
 } from '../repositories/conversationsRepo';
 import { getSupabaseAdmin } from '../lib/supabaseAdmin';
-import { TREE, type NodeKey } from '../bot/tree';
+import { TREE, type TreeDefinition } from '../bot/tree';
 
 function getFirstQueryParam(
   value: string | ParsedQs | (string | ParsedQs)[] | undefined,
@@ -42,10 +44,6 @@ function isValidHubSignature256(rawBody: Buffer | undefined, headerValue: string
   return crypto.timingSafeEqual(provided, expected);
 }
 
-function isNodeKey(value: unknown): value is NodeKey {
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(TREE.nodes, value);
-}
-
 async function isConversationSlugTaken(tenantId: string, slug: string, customerPhone: string) {
   const supabase = await getSupabaseAdmin();
   const { data, error } = await supabase
@@ -64,13 +62,14 @@ async function isConversationSlugTaken(tenantId: string, slug: string, customerP
 export function createWhatsappRouter(logger: Logger) {
   const router = Router();
 
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const mode = getFirstQueryParam(req.query['hub.mode']);
     const verifyToken = getFirstQueryParam(req.query['hub.verify_token']);
     const challenge = getFirstQueryParam(req.query['hub.challenge']);
 
     if (mode === 'subscribe') {
-      if (verifyToken && verifyToken === env.WHATSAPP_VERIFY_TOKEN) {
+      const matchesTenant = Boolean(verifyToken && (await findTenantByVerifyToken(verifyToken)));
+      if (matchesTenant) {
         res.status(200).send(challenge ?? '');
         return;
       }
@@ -83,21 +82,6 @@ export function createWhatsappRouter(logger: Logger) {
   });
 
   router.post('/', async (req, res) => {
-    if (env.META_APP_SECRET) {
-      const signatureHeader = req.header('x-hub-signature-256');
-      const valid =
-        typeof signatureHeader === 'string' &&
-        isValidHubSignature256(req.rawBody, signatureHeader, env.META_APP_SECRET);
-
-      if (!valid) {
-        logger.warn(
-          { hasSignature: Boolean(signatureHeader) },
-          'invalid whatsapp webhook signature',
-        );
-        res.sendStatus(401);
-        return;
-      }
-    }
 
     try {
       const body = req.body as any;
@@ -116,8 +100,24 @@ export function createWhatsappRouter(logger: Logger) {
 
       const tenantWhatsapp = await findTenantByPhoneNumberId(phoneNumberId);
       const tenantId = tenantWhatsapp?.tenant_id ?? 'default';
+      const appSecret = tenantWhatsapp?.meta_app_secret;
+      if (appSecret) {
+        const signatureHeader = req.header('x-hub-signature-256');
+        const valid =
+          typeof signatureHeader === 'string' &&
+          isValidHubSignature256(req.rawBody, signatureHeader, appSecret);
+
+        if (!valid) {
+          logger.warn(
+            { hasSignature: Boolean(signatureHeader) },
+            'invalid whatsapp webhook signature',
+          );
+          res.sendStatus(401);
+          return;
+        }
+      }
       const accessToken = tenantWhatsapp?.access_token ?? env.WHATSAPP_ACCESS_TOKEN;
-      const version = tenantWhatsapp?.graph_version ?? env.WHATSAPP_GRAPH_VERSION ?? 'v22.0';
+      const version = env.WHATSAPP_GRAPH_VERSION ?? 'v22.0';
 
       if (!accessToken) throw new Error('Missing WHATSAPP_ACCESS_TOKEN');
 
@@ -150,9 +150,12 @@ export function createWhatsappRouter(logger: Logger) {
         return;
       }
 
-      const currentNodeKey = isNodeKey((existingConversation as any)?.current_node)
-        ? ((existingConversation as any).current_node as NodeKey)
-        : 'start';
+      const currentNodeKey =
+        typeof (existingConversation as any)?.current_node === 'string'
+          ? ((existingConversation as any).current_node as string)
+          : undefined;
+      const tenantTreeRow = await getTenantTree(tenantId);
+      const treeDefinition: TreeDefinition = tenantTreeRow?.tree ?? TREE;
       const answers =
         (((existingConversation as any)?.answers ?? {}) as Record<string, unknown>) ?? {};
       const normalizedAnswers: Record<string, string> = {};
@@ -163,6 +166,7 @@ export function createWhatsappRouter(logger: Logger) {
       const { nextNodeKey, updatedAnswers, responseAction, shouldHandoff } = processInbound({
         conversation: { currentNodeKey, answers: normalizedAnswers },
         inboundMessage: msg,
+        tree: treeDefinition,
       });
 
       const now = new Date().toISOString();

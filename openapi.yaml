@@ -1,0 +1,672 @@
+openapi: 3.0.3
+info:
+  title: WA Leads API
+  version: 1.0.0
+  description: API para capturar leads vía WhatsApp Cloud, generar JWT con Supabase y exponer recursos protegidos.
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+  - url: https://api.example.com
+    description: Production
+paths:
+  /health:
+    get:
+      summary: Estado del servicio
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /privacy:
+    get:
+      summary: Aviso de privacidad
+      responses:
+        '200':
+          description: Texto del aviso
+          content:
+            text/plain:
+              schema:
+                type: string
+  /auth/token:
+    post:
+      summary: Genera un JWT mediante Supabase (signInWithPassword)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+      responses:
+        '200':
+          description: Sesión generada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          description: Carga inválida
+        '401':
+          description: Credenciales inválidas
+  /api/me:
+    get:
+      summary: Devuelve los datos del usuario autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Datos del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtectedMeResponse'
+        '401':
+          description: Token inválido o ausente
+  /api/tenants/{tenantId}/conversations:
+    get:
+      summary: Lista conversaciones del tenant (paginado por default)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 25
+          description: Número máximo de registros (1-100)
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Conversaciones paginadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '403':
+          description: El usuario no pertenece al tenant
+        '500':
+          description: Error interno
+  /api/tenants/{tenantId}/conversations/{slug}:
+    get:
+      summary: Consulta una conversación por slug dentro de un tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conversación encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetailResponse'
+        '403':
+          description: El usuario no pertenece al tenant
+        '404':
+          description: Conversación no encontrada
+        '500':
+          description: Error interno
+  /api/tenants/{tenantId}/whatsapp:
+    parameters:
+      - in: path
+        name: tenantId
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Regresa la información registrada de WhatsApp por tenant
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Credenciales del tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantWhatsappResponse'
+        '404':
+          description: Tenant no registrado
+    post:
+      summary: Crea o actualiza las credenciales de WhatsApp del tenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantWhatsappConfigRequest'
+      responses:
+        '201':
+          description: Credenciales almacenadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantWhatsappResponse'
+        '400':
+          description: Payload inválido
+        '403':
+          description: El tenantId debe existir y el usuario debe pertenecer al negocio
+        '500':
+          description: Error interno
+  /api/tenants:
+    post:
+      summary: Crea un nuevo negocio (tenant)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantCreateRequest'
+      responses:
+        '201':
+          description: Tenant creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          description: Payload inválido
+        '500':
+          description: Error interno
+  /api/tenants/{tenantId}/tree:
+    get:
+      summary: Obtiene el árbol configurado por un tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Árbol encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantTreeResponse'
+        '404':
+          description: Árbol no encontrado
+        '500':
+          description: Error interno
+  /api/tenants/{tenantId}/members:
+    get:
+      summary: Lista a los miembros asociados al tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Miembros retornados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantUserListResponse'
+        '403':
+          description: El usuario autenticado no pertenece al tenant o no tiene permiso
+        '500':
+          description: Error interno
+    post:
+      summary: Agrega o actualiza un miembro del tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantUserCreateRequest'
+      responses:
+        '201':
+          description: Miembro registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantUserResponse'
+        '400':
+          description: Payload inválido
+        '403':
+          description: No autorizado (solo tenant_admin)
+        '500':
+          description: Error interno
+    put:
+      summary: Crea o actualiza el árbol conversacional del tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantTreeCreateRequest'
+      responses:
+        '200':
+          description: Árbol guardado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantTreeResponse'
+        '400':
+          description: Payload inválido
+        '500':
+          description: Error interno
+  /webhooks/whatsapp:
+    get:
+      summary: Verificación del webhook (handshake Meta)
+      parameters:
+        - in: query
+          name: hub.mode
+          schema:
+            type: string
+        - in: query
+          name: hub.verify_token
+          schema:
+            type: string
+        - in: query
+          name: hub.challenge
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Responde el challenge cuando el verify token coincide
+        '403':
+          description: Token inválido
+    post:
+      summary: Recibe y procesa mensajes entrantes de WhatsApp Cloud
+      requestBody:
+        description: Payload completo que envía Meta (se valida firma x-hub-signature-256 si se configura)
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Confirmación de webhook procesado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsappWebhookResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        uptime:
+          type: number
+          example: 123.4
+        version:
+          type: string
+          example: 1.0.0
+      required:
+        - ok
+        - uptime
+        - version
+    AuthTokenRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: usuario@dominio.test
+        password:
+          type: string
+          example: S3cr3t!
+      required:
+        - email
+        - password
+    Session:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+        refresh_token:
+          type: string
+        provider_token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AuthTokenResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        session:
+          anyOf:
+            - $ref: '#/components/schemas/Session'
+            - type: 'null'
+        user:
+          anyOf:
+            - $ref: '#/components/schemas/User'
+            - type: 'null'
+    ProtectedMeResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        user:
+          $ref: '#/components/schemas/User'
+    WhatsappWebhookResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+    Conversation:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        customer_phone:
+          type: string
+        current_node:
+          type: string
+          nullable: true
+        answers:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        slug:
+          type: string
+          nullable: true
+        handoff_to_human:
+          type: boolean
+        last_inbound_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - tenant_id
+        - customer_phone
+        - handoff_to_human
+    ConversationListResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            conversations:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+    ConversationDetailResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            conversation:
+              $ref: '#/components/schemas/Conversation'
+    TenantWhatsappResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            tenantWhatsapp:
+              type: object
+              properties:
+                id:
+                  type: string
+                tenant_id:
+                  type: string
+                phone_number_id:
+                  type: string
+                access_token:
+                  type: string
+                  nullable: true
+                graph_version:
+                  type: string
+                  nullable: true
+                verify_token:
+                  type: string
+                  nullable: true
+                meta_app_secret:
+                  type: string
+                  nullable: true
+                created_at:
+                  type: string
+                  format: date-time
+    TenantTree:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+        tree:
+          type: object
+          additionalProperties: true
+        name:
+          type: string
+        version:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenant_id
+        - tree
+        - name
+        - created_at
+        - updated_at
+    TenantTreeResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            tenantTree:
+              $ref: '#/components/schemas/TenantTree'
+    TenantTreeCreateRequest:
+      type: object
+      properties:
+        tree:
+          type: object
+          description: Mapa de nodos definidos por el tenant
+          additionalProperties: true
+        name:
+          type: string
+        version:
+          type: string
+      required:
+        - tree
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - created_at
+    TenantResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            tenant:
+              $ref: '#/components/schemas/Tenant'
+    TenantCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+    TenantWhatsappConfigRequest:
+      type: object
+      properties:
+        phoneNumberId:
+          type: string
+        accessToken:
+          type: string
+        verifyToken:
+          type: string
+        metaAppSecret:
+          type: string
+      required:
+        - phoneNumberId
+    TenantUser:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+        supabase_user_id:
+          type: string
+        role:
+          type: string
+          enum:
+            - tenant_admin
+            - agent
+            - viewer
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenant_id
+        - supabase_user_id
+        - role
+        - created_at
+    TenantUserResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            member:
+              $ref: '#/components/schemas/TenantUser'
+    TenantUserListResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            members:
+              type: array
+              items:
+                $ref: '#/components/schemas/TenantUser'
+    TenantUserCreateRequest:
+      type: object
+      properties:
+        supabaseUserId:
+          type: string
+        role:
+          type: string
+          enum:
+            - tenant_admin
+            - agent
+            - viewer
+      required:
+        - supabaseUserId
+        - role
