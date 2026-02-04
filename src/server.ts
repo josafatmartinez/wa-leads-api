@@ -21,7 +21,7 @@ export function createServer({ logger }: CreateServerOptions) {
   app.use(
     express.json({
       limit: '1mb',
-      verify: (req, _res, buf) => {
+      verify: (req: Request, _res: Response, buf: Buffer) => {
         (req as Request & { rawBody?: Buffer }).rawBody = buf;
       },
     }),
