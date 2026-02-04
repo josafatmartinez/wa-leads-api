@@ -27,12 +27,12 @@ export const protectedRouter = Router();
 
 protectedRouter.use(requireSupabaseAuth);
 
-protectedRouter.get('/me', (req, res) => {
+protectedRouter.get('/me', (req: Request, res: Response) => {
   const { supabaseUser } = req as SupabaseAuthenticatedRequest;
   res.json({ ok: true, user: supabaseUser });
 });
 
-protectedRouter.get('/tenants/:tenantId/conversations', async (req, res) => {
+protectedRouter.get('/tenants/:tenantId/conversations', async (req: Request<{ tenantId: string }>, res: Response) => {
   const tenantId = req.params.tenantId;
   const membership = await requireTenantRole(
     toAuthRequest(req),
@@ -52,7 +52,9 @@ protectedRouter.get('/tenants/:tenantId/conversations', async (req, res) => {
   }
 });
 
-protectedRouter.get('/tenants/:tenantId/conversations/:slug', async (req, res) => {
+protectedRouter.get(
+  '/tenants/:tenantId/conversations/:slug',
+  async (req: Request<{ tenantId: string; slug: string }>, res: Response) => {
   const tenantId = req.params.tenantId;
   const slug = req.params.slug;
   const membership = await requireTenantRole(
@@ -76,7 +78,7 @@ protectedRouter.get('/tenants/:tenantId/conversations/:slug', async (req, res) =
   }
 });
 
-protectedRouter.get('/tenants/:tenantId/whatsapp', async (req, res) => {
+protectedRouter.get('/tenants/:tenantId/whatsapp', async (req: Request<{ tenantId: string }>, res: Response) => {
   const tenantId = req.params.tenantId;
   try {
     const tenantWhatsapp = await getTenantWhatsappByTenant(tenantId);
@@ -102,7 +104,7 @@ const tenantWhatsappSchema = z.object({
   metaAppSecret: z.string().min(1).optional(),
 });
 
-protectedRouter.post('/tenants', async (req, res) => {
+protectedRouter.post('/tenants', async (req: Request, res: Response) => {
   const parsed = tenantCreateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
@@ -126,7 +128,7 @@ protectedRouter.post('/tenants', async (req, res) => {
   }
 });
 
-protectedRouter.post('/tenants/:tenantId/whatsapp', async (req, res) => {
+protectedRouter.post('/tenants/:tenantId/whatsapp', async (req: Request<{ tenantId: string }>, res: Response) => {
   const tenantId = req.params.tenantId;
   const membership = await requireTenantRole(
     toAuthRequest(req),
@@ -252,7 +254,7 @@ async function requireTenantRole(
   }
 }
 
-protectedRouter.get('/tenants/:tenantId/members', async (req, res) => {
+protectedRouter.get('/tenants/:tenantId/members', async (req: Request<{ tenantId: string }>, res: Response) => {
   const tenantId = req.params.tenantId;
   const membership = await requireTenantRole(
     toAuthRequest(req),
@@ -271,7 +273,7 @@ protectedRouter.get('/tenants/:tenantId/members', async (req, res) => {
   }
 });
 
-protectedRouter.post('/tenants/:tenantId/members', async (req, res) => {
+protectedRouter.post('/tenants/:tenantId/members', async (req: Request<{ tenantId: string }>, res: Response) => {
   const tenantId = req.params.tenantId;
   const membership = await requireTenantRole(
     toAuthRequest(req),
