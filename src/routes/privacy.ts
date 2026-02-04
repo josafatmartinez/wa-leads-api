@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 
 export const privacyRouter = Router();
 
-privacyRouter.get('/', (_req, res) => {
+privacyRouter.get('/', (_req: Request, res: Response) => {
   res.type('text/plain').send(`Aviso de privacidad
 
 Este chatbot utiliza WhatsApp para atender tus solicitudes. Los datos que compartas (como tu número, nombre y mensajes) se usarán únicamente para brindar soporte, dar seguimiento a tu solicitud y mejorar la calidad del servicio.

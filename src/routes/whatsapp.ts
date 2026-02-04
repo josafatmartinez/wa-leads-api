@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { ParsedQs } from 'qs';
 import type { Logger } from 'pino';
 import crypto from 'node:crypto';
@@ -62,7 +62,7 @@ async function isConversationSlugTaken(tenantId: string, slug: string, customerP
 export function createWhatsappRouter(logger: Logger) {
   const router = Router();
 
-  router.get('/', async (req, res) => {
+  router.get('/', async (req: Request, res: Response) => {
     const mode = getFirstQueryParam(req.query['hub.mode']);
     const verifyToken = getFirstQueryParam(req.query['hub.verify_token']);
     const challenge = getFirstQueryParam(req.query['hub.challenge']);
@@ -81,7 +81,7 @@ export function createWhatsappRouter(logger: Logger) {
     res.status(200).send('OK');
   });
 
-  router.post('/', async (req, res) => {
+  router.post('/', async (req: Request, res: Response) => {
 
     try {
       const body = req.body as any;

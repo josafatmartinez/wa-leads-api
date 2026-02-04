@@ -1,4 +1,4 @@
-import express, { type Request } from 'express';
+import express, { type Request, type Response } from 'express';
 import type { Logger } from 'pino';
 
 import { healthRouter } from './routes/health';
@@ -27,7 +27,7 @@ export function createServer({ logger }: CreateServerOptions) {
     }),
   );
 
-  app.get('/', (_req, res) => res.redirect('/health'));
+  app.get('/', (_req: Request, res: Response) => res.redirect('/health'));
   app.use('/health', healthRouter);
   app.use('/privacy', privacyRouter);
   app.use('/auth', authRouter);
@@ -37,7 +37,7 @@ export function createServer({ logger }: CreateServerOptions) {
   }
   app.use('/webhooks/whatsapp', createWhatsappRouter(logger.child({ scope: 'whatsapp-webhook' })));
 
-  app.use((_req, res) => {
+  app.use((_req: Request, res: Response) => {
     res.status(404).json({ ok: false, error: { message: 'Not Found' } });
   });
 
