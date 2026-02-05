@@ -1,11 +1,13 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type CookieOptions } from 'express';
 import { z } from 'zod';
 
+import { env } from '../config/env';
 import { getSupabaseAnonClient } from '../lib/supabaseAdmin';
 
 const tokenSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  remember: z.boolean().optional(),
 });
 
 const registerSchema = z.object({
@@ -15,6 +17,34 @@ const registerSchema = z.object({
   phone: z.string().optional(),
 });
 
+const COOKIE_TOKEN_NAME = 'supabase-auth-token';
+const COOKIE_REFRESH_NAME = 'supabase-auth-refresh-token';
+const REMEMBER_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function buildCookieOptions(maxAge: number): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge,
+  };
+}
+
+function setSessionCookies(res: Response, session: any, remember: boolean) {
+  if (!session) return;
+  const expiresInMs = session.expires_in ? session.expires_in * 1000 : REMEMBER_DURATION_MS;
+  const tokenMaxAge = remember ? REMEMBER_DURATION_MS : expiresInMs;
+  const refreshMaxAge = remember ? REMEMBER_DURATION_MS : expiresInMs;
+
+  if (session.access_token) {
+    res.cookie(COOKIE_TOKEN_NAME, session.access_token, buildCookieOptions(tokenMaxAge));
+  }
+  if (session.refresh_token) {
+    res.cookie(COOKIE_REFRESH_NAME, session.refresh_token, buildCookieOptions(refreshMaxAge));
+  }
+}
+
 export const authRouter = Router();
 
 authRouter.post('/token', async (req: Request, res: Response) => {
@@ -23,6 +53,8 @@ authRouter.post('/token', async (req: Request, res: Response) => {
     res.status(400).json({ ok: false, error: { message: 'invalid payload', issues: parsed.error.format() } });
     return;
   }
+
+  const remember = parsed.data.remember ?? false;
 
   try {
     const supabase = await getSupabaseAnonClient();
@@ -35,6 +67,13 @@ authRouter.post('/token', async (req: Request, res: Response) => {
       res.status(401).json({ ok: false, error: { message: error.message } });
       return;
     }
+
+    const session = data?.session ?? null;
+    if (!session) {
+      res.status(500).json({ ok: false, error: { message: 'missing session information' } });
+      return;
+    }
+    setSessionCookies(res, session, remember);
 
     res.json({
       ok: true,

@@ -466,6 +466,10 @@ components:
         password:
           type: string
           example: S3cr3t!
+        remember:
+          type: boolean
+          default: false
+          description: Keep user logged in by extending the cookie lifetime.
       required:
         - email
         - password
