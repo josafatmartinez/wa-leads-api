@@ -8,9 +8,20 @@ servers:
     description: Local dev
   - url: https://api.example.com
     description: Production
+tags:
+  - name: System
+    description: Health checks and metadata responses.
+  - name: Authentication
+    description: Login, registration, and user session endpoints.
+  - name: Tenants
+    description: Tenancy, conversations, and WhatsApp configuration.
+  - name: WhatsApp
+    description: Webhook endpoints consumidas por WhatsApp Cloud.
 paths:
   /health:
     get:
+      tags:
+        - System
       summary: Estado del servicio
       responses:
         '200':
@@ -21,6 +32,8 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
   /privacy:
     get:
+      tags:
+        - System
       summary: Aviso de privacidad
       responses:
         '200':
@@ -31,6 +44,8 @@ paths:
                 type: string
   /auth/token:
     post:
+      tags:
+        - Authentication
       summary: Genera un JWT mediante Supabase (signInWithPassword)
       requestBody:
         required: true
@@ -49,8 +64,32 @@ paths:
           description: Carga inválida
         '401':
           description: Credenciales inválidas
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Registra un nuevo usuario en Supabase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRegisterRequest'
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          description: Carga inválida o ya existe el usuario
+        '500':
+          description: Error interno
   /api/me:
     get:
+      tags:
+        - Authentication
       summary: Devuelve los datos del usuario autenticado
       security:
         - bearerAuth: []
@@ -65,6 +104,8 @@ paths:
           description: Token inválido o ausente
   /api/tenants/{tenantId}/conversations:
     get:
+      tags:
+        - Tenants
       summary: Lista conversaciones del tenant (paginado por default)
       security:
         - bearerAuth: []
@@ -98,6 +139,8 @@ paths:
           description: Error interno
   /api/tenants/{tenantId}/conversations/{slug}:
     get:
+      tags:
+        - Tenants
       summary: Consulta una conversación por slug dentro de un tenant
       security:
         - bearerAuth: []
@@ -127,6 +170,8 @@ paths:
           description: Error interno
   /api/tenants/{tenantId}/whatsapp:
     get:
+      tags:
+        - Tenants
       summary: Regresa la información registrada de WhatsApp por tenant
       security:
         - bearerAuth: []
@@ -146,6 +191,8 @@ paths:
         '404':
           description: Tenant no registrado
     post:
+      tags:
+        - Tenants
       summary: Crea o actualiza las credenciales de WhatsApp del tenant
       security:
         - bearerAuth: []
@@ -176,6 +223,8 @@ paths:
           description: Error interno
   /api/tenants:
     post:
+      tags:
+        - Tenants
       summary: Crea un nuevo negocio (tenant)
       security:
         - bearerAuth: []
@@ -198,6 +247,8 @@ paths:
           description: Error interno
   /api/tenants/{tenantId}/tree:
     get:
+      tags:
+        - Tenants
       summary: Obtiene el árbol configurado por un tenant
       security:
         - bearerAuth: []
@@ -219,6 +270,8 @@ paths:
         '500':
           description: Error interno
     put:
+      tags:
+        - Tenants
       summary: Crea o actualiza el árbol conversacional del tenant
       security:
         - bearerAuth: []
@@ -247,6 +300,8 @@ paths:
           description: Error interno
   /api/tenants/{tenantId}/members:
     get:
+      tags:
+        - Tenants
       summary: Lista a los miembros asociados al tenant
       security:
         - bearerAuth: []
@@ -268,6 +323,8 @@ paths:
         '500':
           description: Error interno
     post:
+      tags:
+        - Tenants
       summary: Agrega o actualiza un miembro del tenant
       security:
         - bearerAuth: []
@@ -298,6 +355,8 @@ paths:
           description: Error interno
   /api/tenants/{tenantId}/members/{memberId}/password:
     post:
+      tags:
+        - Tenants
       summary: Resets or sets a member password
       security:
         - bearerAuth: []
@@ -335,6 +394,8 @@ paths:
           description: Error interno
   /webhooks/whatsapp:
     get:
+      tags:
+        - WhatsApp
       summary: Verificación del webhook (handshake Meta)
       parameters:
         - in: query
@@ -355,6 +416,8 @@ paths:
         '403':
           description: Token inválido
     post:
+      tags:
+        - WhatsApp
       summary: Recibe y procesa mensajes entrantes de WhatsApp Cloud
       requestBody:
         description: Payload completo que envía Meta (se valida firma x-hub-signature-256 si se configura)
@@ -403,6 +466,26 @@ components:
         password:
           type: string
           example: S3cr3t!
+      required:
+        - email
+        - password
+    AuthRegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: usuario@dominio.test
+        password:
+          type: string
+          minLength: 8
+          example: S3cr3tPass!
+        fullName:
+          type: string
+          example: Nombre Completo
+        phone:
+          type: string
+          example: '+52 55 0000 0000'
       required:
         - email
         - password
