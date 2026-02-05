@@ -17,7 +17,23 @@ function loadSpec() {
 
 export function createDocsRouter() {
   const router = Router();
-  const document = loadSpec();
-  router.use('/', swaggerUi.serve, swaggerUi.setup(document));
+  router.use(
+    '/',
+    swaggerUi.serve,
+    (req, res, next) => {
+      const document = loadSpec();
+      const host = `${req.protocol}://${req.get('host')}`;
+      const specWithHost = {
+        ...document,
+        servers: [
+          {
+            url: host,
+            description: 'Detected host from request',
+          },
+        ],
+      };
+      return swaggerUi.setup(specWithHost)(req, res, next);
+    },
+  );
   return router;
 }
