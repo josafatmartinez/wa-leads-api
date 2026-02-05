@@ -367,13 +367,16 @@ export async function listTenantsForUser(
     .eq('supabase_user_id', supabaseUserId);
 
   if (error) throw new Error(formatErrorContext('listTenantsForUser failed', error));
-  const rows = (data as Array<{ role: TenantUserRole; tenants: TenantRow | null }> | null) ?? [];
-  return rows
-    .filter((row) => Boolean(row.tenants))
-    .map((row) => ({
-      id: row.tenants!.id,
-      name: row.tenants!.name,
-      created_at: row.tenants!.created_at,
+  const rows = (data as Array<{ role: TenantUserRole; tenants: TenantRow[] | null }> | null) ?? [];
+  return rows.reduce<TenantWithRoleRow[]>((acc, row) => {
+    const tenant = row.tenants?.[0];
+    if (!tenant) return acc;
+    acc.push({
+      id: tenant.id,
+      name: tenant.name,
+      created_at: tenant.created_at,
       role: row.role,
-    }));
+    });
+    return acc;
+  }, []);
 }
