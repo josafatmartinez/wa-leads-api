@@ -268,6 +268,10 @@ export type TenantRow = {
   created_at: string;
 };
 
+export type TenantWithRoleRow = TenantRow & {
+  role: TenantUserRole;
+};
+
 export async function getTenantTree(tenantId: string): Promise<TenantTreeRow | null> {
   const supabaseAdmin = await getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
@@ -351,4 +355,25 @@ export async function createTenant(name: string): Promise<TenantRow> {
   if (error) throw new Error(formatErrorContext('createTenant failed', error));
   if (!data) throw new Error('createTenant failed: missing data');
   return data as TenantRow;
+}
+
+export async function listTenantsForUser(
+  supabaseUserId: string,
+): Promise<TenantWithRoleRow[]> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from('tenant_users')
+    .select('role, tenants (id, name, created_at)')
+    .eq('supabase_user_id', supabaseUserId);
+
+  if (error) throw new Error(formatErrorContext('listTenantsForUser failed', error));
+  const rows = (data as Array<{ role: TenantUserRole; tenants: TenantRow | null }> | null) ?? [];
+  return rows
+    .filter((row) => Boolean(row.tenants))
+    .map((row) => ({
+      id: row.tenants!.id,
+      name: row.tenants!.name,
+      created_at: row.tenants!.created_at,
+      role: row.role,
+    }));
 }

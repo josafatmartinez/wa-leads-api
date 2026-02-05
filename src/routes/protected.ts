@@ -18,6 +18,7 @@ import {
   upsertTenantTree,
   upsertTenantUser,
   upsertTenantWhatsapp,
+  listTenantsForUser,
 } from '../repositories/conversationsRepo';
 import { requireSupabaseAuth, type SupabaseAuthenticatedRequest } from '../middlewares/supabaseAuth';
 import { tenantTreeSchema } from '../lib/tenantTree';
@@ -31,6 +32,17 @@ protectedRouter.use(requireSupabaseAuth);
 protectedRouter.get('/me', (req: Request, res: Response) => {
   const { supabaseUser } = req as SupabaseAuthenticatedRequest;
   res.json({ ok: true, user: supabaseUser });
+});
+
+protectedRouter.get('/tenants', async (req: Request, res: Response) => {
+  try {
+    const supabaseUserId = toAuthRequest(req).supabaseUser.id;
+    const tenants = await listTenantsForUser(supabaseUserId);
+    res.json({ ok: true, data: { tenants } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'could not fetch tenants';
+    res.status(500).json({ ok: false, error: { message } });
+  }
 });
 
 protectedRouter.get('/tenants/:tenantId/conversations', async (req: Request<{ tenantId: string }>, res: Response) => {
