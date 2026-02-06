@@ -6,7 +6,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
-  WHATSAPP_GRAPH_VERSION: z.string().min(1).default('v22.0'),
+  WHATSAPP_GRAPH_VERSION: z.string().min(1).default('v24.0'),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_ANON_KEY: z.string().min(1),

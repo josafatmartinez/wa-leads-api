@@ -17,7 +17,31 @@ function loadSpec() {
 
 export function createDocsRouter() {
   const router = Router();
-  const document = loadSpec();
-  router.use('/', swaggerUi.serve, swaggerUi.setup(document));
+  router.get('/openapi.json', (req, res) => {
+    const document = loadSpec() as Record<string, unknown>;
+    const forwardedProto = req.header('x-forwarded-proto');
+    const protocol = forwardedProto?.split(',')[0]?.trim() || req.protocol;
+    const host = req.get('host');
+    const origin = host ? `${protocol}://${host}` : undefined;
+
+    const dynamicDocument = {
+      ...document,
+      servers: origin
+        ? [{ url: origin, description: 'Current host' }]
+        : ((document.servers as unknown[]) ?? []),
+    };
+
+    res.json(dynamicDocument);
+  });
+
+  router.use(
+    '/',
+    swaggerUi.serve,
+    swaggerUi.setup(undefined, {
+      swaggerOptions: {
+        url: '/docs/openapi.json',
+      },
+    }),
+  );
   return router;
 }

@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import type { Logger } from 'pino';
+import { randomUUID } from 'node:crypto';
 
 import { healthRouter } from './routes/health';
 import { privacyRouter } from './routes/privacy';
@@ -27,11 +28,49 @@ export function createServer({ logger }: CreateServerOptions) {
     }),
   );
 
+  app.use((req: Request, res: Response, next) => {
+    const requestId = req.header('x-request-id') || randomUUID();
+    res.setHeader('x-request-id', requestId);
+    const startedAt = process.hrtime.bigint();
+
+    res.on('finish', () => {
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      const details = {
+        requestId,
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs: Number(durationMs.toFixed(2)),
+      };
+
+      if (res.statusCode >= 500) {
+        logger.error(details, 'HTTP 5xx');
+      } else if (res.statusCode >= 400) {
+        logger.warn(details, 'HTTP 4xx');
+      } else {
+        logger.info(details, 'HTTP OK');
+      }
+    });
+
+    next();
+  });
+
   app.get('/', (_req: Request, res: Response) => res.redirect('/health'));
   app.use('/health', healthRouter);
   app.use('/privacy', privacyRouter);
   app.use('/auth', authRouter);
-  app.use('/api', protectedRouter);
+  app.use(
+    '/api',
+    (req: Request, res: Response, next) => {
+      if (!req.originalUrl.startsWith('/api/v1/')) {
+        res.setHeader('Deprecation', 'true');
+        res.setHeader('Sunset', 'Wed, 31 Dec 2026 23:59:59 GMT');
+      }
+      next();
+    },
+    protectedRouter,
+  );
+  app.use('/api/v1', protectedRouter);
   if (env.NODE_ENV === 'development') {
     app.use('/docs', createDocsRouter());
   }
