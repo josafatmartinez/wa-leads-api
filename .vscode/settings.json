@@ -1,3 +1,15 @@
 {
-  "cSpell.words": ["dedupe", "pgcrypto", "supabase", "whatsapp"]
+  "cSpell.words": [
+    "cloudflared",
+    "dedupe",
+    "deduplicación",
+    "deduplicar",
+    "healthcheck",
+    "HMAC",
+    "pgcrypto",
+    "redeployar",
+    "reenvíos",
+    "supabase",
+    "whatsapp"
+  ]
 }
