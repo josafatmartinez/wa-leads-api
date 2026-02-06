@@ -82,7 +82,6 @@ export function createWhatsappRouter(logger: Logger) {
   });
 
   router.post('/', async (req: Request, res: Response) => {
-
     try {
       const body = req.body as any;
       const value = body?.entry?.[0]?.changes?.[0]?.value;
@@ -99,7 +98,13 @@ export function createWhatsappRouter(logger: Logger) {
       }
 
       const tenantWhatsapp = await findTenantByPhoneNumberId(phoneNumberId);
-      const tenantId = tenantWhatsapp?.tenant_id ?? 'default';
+      if (!tenantWhatsapp) {
+        logger.warn({ phoneNumberId }, 'whatsapp webhook ignored: tenant not configured');
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      const tenantId = tenantWhatsapp.tenant_id;
       const appSecret = tenantWhatsapp?.meta_app_secret;
       if (appSecret) {
         const signatureHeader = req.header('x-hub-signature-256');
@@ -117,7 +122,7 @@ export function createWhatsappRouter(logger: Logger) {
         }
       }
       const accessToken = tenantWhatsapp?.access_token ?? env.WHATSAPP_ACCESS_TOKEN;
-      const version = env.WHATSAPP_GRAPH_VERSION ?? 'v22.0';
+      const version = env.WHATSAPP_GRAPH_VERSION;
 
       if (!accessToken) throw new Error('Missing WHATSAPP_ACCESS_TOKEN');
 
@@ -156,8 +161,7 @@ export function createWhatsappRouter(logger: Logger) {
           : undefined;
       const tenantTreeRow = await getTenantTree(tenantId);
       const treeDefinition: TreeDefinition = tenantTreeRow?.tree ?? TREE;
-      const answers =
-        (((existingConversation as any)?.answers ?? {}) as Record<string, unknown>) ?? {};
+      const answers = ((existingConversation as any)?.answers ?? {}) as Record<string, unknown>;
       const normalizedAnswers: Record<string, string> = {};
       for (const [k, v] of Object.entries(answers)) {
         if (typeof v === 'string') normalizedAnswers[k] = v;

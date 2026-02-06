@@ -167,8 +167,9 @@ export function processInbound({
   }
 
   const nextNode = nodes[nextNodeKey] ?? startNode;
+  const resolvedNextNodeKey = resolveNodeKey(nodes, nextNodeKey);
   return {
-    nextNodeKey,
+    nextNodeKey: resolvedNextNodeKey,
     updatedAnswers,
     responseAction: buildResponseAction(nextNode),
     shouldHandoff: nextNode.type === 'end',
