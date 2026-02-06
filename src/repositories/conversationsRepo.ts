@@ -75,9 +75,7 @@ export async function findTenantByPhoneNumberId(
   return (data as TenantWhatsappRow | null) ?? null;
 }
 
-export async function findTenantByVerifyToken(
-  token: string,
-): Promise<TenantWhatsappRow | null> {
+export async function findTenantByVerifyToken(token: string): Promise<TenantWhatsappRow | null> {
   const supabaseAdmin = await getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from('tenant_whatsapp')
@@ -170,13 +168,24 @@ export async function listConversations({
 }): Promise<ConversationRow[]> {
   const supabaseAdmin = await getSupabaseAdmin();
   const { from, to } = buildRange(offset, limit);
-  let builder = supabaseAdmin.from('conversations').select('*');
+  let builder = supabaseAdmin.from('conversations').select('*').order('updated_at', { ascending: false });
   if (tenantId) {
     builder = builder.eq('tenant_id', tenantId);
   }
   const { data, error } = await builder.range(from, to);
   if (error) throw new Error(formatErrorContext('listConversations failed', error));
   return (data as ConversationRow[] | null) ?? [];
+}
+
+export async function countConversations({ tenantId }: { tenantId?: string }): Promise<number> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  let builder = supabaseAdmin.from('conversations').select('*', { count: 'exact', head: true });
+  if (tenantId) {
+    builder = builder.eq('tenant_id', tenantId);
+  }
+  const { count, error } = await builder;
+  if (error) throw new Error(formatErrorContext('countConversations failed', error));
+  return count ?? 0;
 }
 
 function buildRange(offset: number, limit: number) {
@@ -262,6 +271,31 @@ export type TenantUserPayload = {
   role: TenantUserRole;
 };
 
+export const TENANT_INVITATION_STATUSES = ['pending', 'accepted', 'revoked', 'expired'] as const;
+export type TenantInvitationStatus = (typeof TENANT_INVITATION_STATUSES)[number];
+
+export type TenantInvitationRow = {
+  id: string;
+  tenant_id: string;
+  email: string;
+  role: TenantUserRole;
+  token_hash: string;
+  status: TenantInvitationStatus;
+  invited_by: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+};
+
+export type TenantInvitationInsert = {
+  tenant_id: string;
+  email: string;
+  role: TenantUserRole;
+  token_hash: string;
+  invited_by: string;
+  expires_at: string;
+};
+
 export type TenantRow = {
   id: string;
   name: string;
@@ -340,15 +374,113 @@ export async function upsertTenantUser(payload: TenantUserPayload): Promise<Tena
   return data as TenantUserRow;
 }
 
-export async function createTenant(name: string): Promise<TenantRow> {
+export async function hasUserRoleInAnyTenant(
+  supabaseUserId: string,
+  role: TenantUserRole,
+): Promise<boolean> {
   const supabaseAdmin = await getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
-    .from('tenants')
-    .insert({ name })
-    .select('*')
-    .single();
+    .from('tenant_users')
+    .select('id')
+    .eq('supabase_user_id', supabaseUserId)
+    .eq('role', role)
+    .limit(1);
+
+  if (error) throw new Error(formatErrorContext('hasUserRoleInAnyTenant failed', error));
+  return Boolean(data && data.length > 0);
+}
+
+export async function createTenant(name: string): Promise<TenantRow> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin.from('tenants').insert({ name }).select('*').single();
 
   if (error) throw new Error(formatErrorContext('createTenant failed', error));
   if (!data) throw new Error('createTenant failed: missing data');
   return data as TenantRow;
+}
+
+export async function createTenantInvitation(
+  payload: TenantInvitationInsert,
+): Promise<TenantInvitationRow> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from('tenant_invitations')
+    .insert({
+      ...payload,
+      email: payload.email.toLowerCase().trim(),
+      status: 'pending',
+    })
+    .select('*')
+    .single();
+
+  if (error) throw new Error(formatErrorContext('createTenantInvitation failed', error));
+  if (!data) throw new Error('createTenantInvitation failed: missing data');
+  return data as TenantInvitationRow;
+}
+
+export async function listTenantInvitations(tenantId: string): Promise<TenantInvitationRow[]> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from('tenant_invitations')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(formatErrorContext('listTenantInvitations failed', error));
+  return (data as TenantInvitationRow[] | null) ?? [];
+}
+
+export async function getTenantInvitationByTokenHash(
+  tokenHash: string,
+): Promise<TenantInvitationRow | null> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from('tenant_invitations')
+    .select('*')
+    .eq('token_hash', tokenHash)
+    .maybeSingle();
+
+  if (error) throw new Error(formatErrorContext('getTenantInvitationByTokenHash failed', error));
+  return (data as TenantInvitationRow | null) ?? null;
+}
+
+export async function markTenantInvitationStatus(
+  invitationId: string,
+  status: TenantInvitationStatus,
+  acceptedAt?: string | null,
+): Promise<TenantInvitationRow | null> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const patch: {
+    status: TenantInvitationStatus;
+    accepted_at?: string | null;
+  } = { status };
+  if (acceptedAt !== undefined) patch.accepted_at = acceptedAt;
+
+  const { data, error } = await supabaseAdmin
+    .from('tenant_invitations')
+    .update(patch)
+    .eq('id', invitationId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw new Error(formatErrorContext('markTenantInvitationStatus failed', error));
+  return (data as TenantInvitationRow | null) ?? null;
+}
+
+export async function revokeTenantInvitation(
+  tenantId: string,
+  invitationId: string,
+): Promise<TenantInvitationRow | null> {
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from('tenant_invitations')
+    .update({ status: 'revoked' satisfies TenantInvitationStatus })
+    .eq('id', invitationId)
+    .eq('tenant_id', tenantId)
+    .eq('status', 'pending')
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw new Error(formatErrorContext('revokeTenantInvitation failed', error));
+  return (data as TenantInvitationRow | null) ?? null;
 }
