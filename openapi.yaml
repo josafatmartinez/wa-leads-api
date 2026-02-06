@@ -2,15 +2,28 @@ openapi: 3.0.3
 info:
   title: WA Leads API
   version: 1.0.0
-  description: API para capturar leads vía WhatsApp Cloud, generar JWT con Supabase y exponer recursos protegidos.
+  description: API para capturar leads vía WhatsApp Cloud, generar JWT con Supabase y exponer recursos protegidos. La versión vigente usa /api/v1; /api se mantiene como alias temporal deprecado.
 servers:
   - url: http://localhost:3000
     description: Local dev
   - url: https://api.example.com
     description: Production
+tags:
+  - name: Health
+    description: Estado y disponibilidad del servicio
+  - name: Privacy
+    description: Aviso de privacidad
+  - name: Auth
+    description: Registro, login y gestión de credenciales de acceso
+  - name: Tenants
+    description: Gestión de tenants, miembros, configuración y recursos protegidos
+  - name: Webhooks
+    description: Integración con WhatsApp Cloud API
 paths:
   /health:
     get:
+      tags:
+        - Health
       summary: Estado del servicio
       responses:
         '200':
@@ -21,6 +34,8 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
   /privacy:
     get:
+      tags:
+        - Privacy
       summary: Aviso de privacidad
       responses:
         '200':
@@ -29,9 +44,11 @@ paths:
             text/plain:
               schema:
                 type: string
-  /auth/token:
+  /auth/sessions:
     post:
-      summary: Genera un JWT mediante Supabase (signInWithPassword)
+      tags:
+        - Auth
+      summary: Crea una sesión con email/password (Supabase)
       requestBody:
         required: true
         content:
@@ -49,8 +66,97 @@ paths:
           description: Carga inválida
         '401':
           description: Credenciales inválidas
-  /api/me:
+  /auth/token:
+    post:
+      tags:
+        - Auth
+      deprecated: true
+      summary: (Deprecated) Usa /auth/sessions para crear sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+      responses:
+        '200':
+          description: Sesión generada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          description: Carga inválida
+        '401':
+          description: Credenciales inválidas
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Registra un usuario en Supabase Auth (email/password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRegisterRequest'
+      responses:
+        '201':
+          description: Usuario registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRegisterResponse'
+        '400':
+          description: Carga inválida
+  /auth/password/reset:
+    post:
+      tags:
+        - Auth
+      summary: Envía el correo de recuperación de contraseña (Supabase)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthPasswordResetRequest'
+      responses:
+        '200':
+          description: Correo de recuperación enviado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthPasswordResetResponse'
+        '400':
+          description: Carga inválida
+  /auth/password:
+    post:
+      tags:
+        - Auth
+      summary: Actualiza la contraseña del usuario autenticado
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthPasswordUpdateRequest'
+      responses:
+        '200':
+          description: Contraseña actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthPasswordUpdateResponse'
+        '400':
+          description: Carga inválida
+        '401':
+          description: Token inválido o ausente
+  /api/v1/me:
     get:
+      tags:
+        - Tenants
       summary: Devuelve los datos del usuario autenticado
       security:
         - bearerAuth: []
@@ -63,8 +169,41 @@ paths:
                 $ref: '#/components/schemas/ProtectedMeResponse'
         '401':
           description: Token inválido o ausente
-  /api/tenants/{tenantId}/conversations:
+  /api/v1/users/{uid}:
     get:
+      tags:
+        - Tenants
+      summary: Obtiene información pública de un usuario por UID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: uid
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Usuario encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicUserDetailResponse'
+        '400':
+          description: UID inválido
+        '401':
+          description: Token inválido o ausente
+        '403':
+          description: No autorizado (solo tenant_admin)
+        '404':
+          description: Usuario no encontrado
+        '500':
+          description: Error interno
+  /api/v1/tenants/{tenantId}/conversations:
+    get:
+      tags:
+        - Tenants
       summary: Lista conversaciones del tenant (paginado por default)
       security:
         - bearerAuth: []
@@ -78,14 +217,19 @@ paths:
           name: limit
           schema:
             type: integer
+            minimum: 1
+            maximum: 100
             default: 25
           description: Número máximo de registros (1-100)
         - in: query
           name: offset
           schema:
             type: integer
+            minimum: 0
             default: 0
       responses:
+        '400':
+          description: Parámetros de query inválidos
         '200':
           description: Conversaciones paginadas
           content:
@@ -96,8 +240,10 @@ paths:
           description: El usuario no pertenece al tenant
         '500':
           description: Error interno
-  /api/tenants/{tenantId}/conversations/{slug}:
+  /api/v1/tenants/{tenantId}/conversations/{slug}:
     get:
+      tags:
+        - Tenants
       summary: Consulta una conversación por slug dentro de un tenant
       security:
         - bearerAuth: []
@@ -125,7 +271,7 @@ paths:
           description: Conversación no encontrada
         '500':
           description: Error interno
-  /api/tenants/{tenantId}/whatsapp:
+  /api/v1/tenants/{tenantId}/whatsapp:
     parameters:
       - in: path
         name: tenantId
@@ -133,6 +279,8 @@ paths:
         schema:
           type: string
     get:
+      tags:
+        - Tenants
       summary: Regresa la información registrada de WhatsApp por tenant
       security:
         - bearerAuth: []
@@ -143,9 +291,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantWhatsappResponse'
+        '403':
+          description: No autorizado (solo tenant_admin)
         '404':
           description: Tenant no registrado
     post:
+      tags:
+        - Tenants
       summary: Crea o actualiza las credenciales de WhatsApp del tenant
       security:
         - bearerAuth: []
@@ -168,8 +320,10 @@ paths:
           description: El tenantId debe existir y el usuario debe pertenecer al negocio
         '500':
           description: Error interno
-  /api/tenants:
+  /api/v1/tenants:
     post:
+      tags:
+        - Tenants
       summary: Crea un nuevo negocio (tenant)
       security:
         - bearerAuth: []
@@ -190,8 +344,10 @@ paths:
           description: Payload inválido
         '500':
           description: Error interno
-  /api/tenants/{tenantId}/tree:
+  /api/v1/tenants/{tenantId}/tree:
     get:
+      tags:
+        - Tenants
       summary: Obtiene el árbol configurado por un tenant
       security:
         - bearerAuth: []
@@ -208,12 +364,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantTreeResponse'
+        '403':
+          description: No autorizado (solo tenant_admin)
         '404':
           description: Árbol no encontrado
         '500':
           description: Error interno
-  /api/tenants/{tenantId}/members:
+    put:
+      tags:
+        - Tenants
+      summary: Crea o actualiza el árbol conversacional del tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantTreeCreateRequest'
+      responses:
+        '200':
+          description: Árbol guardado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantTreeResponse'
+        '400':
+          description: Payload inválido
+        '403':
+          description: No autorizado (solo tenant_admin)
+        '500':
+          description: Error interno
+  /api/v1/tenants/{tenantId}/members:
     get:
+      tags:
+        - Tenants
       summary: Lista a los miembros asociados al tenant
       security:
         - bearerAuth: []
@@ -235,6 +426,8 @@ paths:
         '500':
           description: Error interno
     post:
+      tags:
+        - Tenants
       summary: Agrega o actualiza un miembro del tenant
       security:
         - bearerAuth: []
@@ -263,8 +456,34 @@ paths:
           description: No autorizado (solo tenant_admin)
         '500':
           description: Error interno
-    put:
-      summary: Crea o actualiza el árbol conversacional del tenant
+  /api/v1/tenants/{tenantId}/invitations:
+    get:
+      tags:
+        - Tenants
+      summary: Lista invitaciones del tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitaciones retornadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantInvitationListResponse'
+        '403':
+          description: No autorizado (solo tenant_admin)
+        '500':
+          description: Error interno
+    post:
+      tags:
+        - Tenants
+      summary: Crea una invitación para un miembro del tenant
       security:
         - bearerAuth: []
       parameters:
@@ -278,20 +497,92 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TenantTreeCreateRequest'
+              $ref: '#/components/schemas/TenantInvitationCreateRequest'
       responses:
-        '200':
-          description: Árbol guardado
+        '201':
+          description: Invitación creada
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TenantTreeResponse'
+                $ref: '#/components/schemas/TenantInvitationCreateResponse'
         '400':
           description: Payload inválido
+        '403':
+          description: No autorizado (solo tenant_admin)
+        '409':
+          description: Ya existe invitación pendiente para ese email
+        '500':
+          description: Error interno
+  /api/v1/tenants/{tenantId}/invitations/{invitationId}:
+    delete:
+      tags:
+        - Tenants
+      summary: Revoca una invitación pendiente del tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: invitationId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Invitación revocada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantInvitationResponse'
+        '400':
+          description: Parámetros inválidos
+        '403':
+          description: No autorizado (solo tenant_admin)
+        '404':
+          description: Invitación pendiente no encontrada
+        '500':
+          description: Error interno
+  /api/v1/invitations/{token}/accept:
+    post:
+      tags:
+        - Tenants
+      summary: Acepta una invitación de tenant para el usuario autenticado
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitación aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantInvitationAcceptResponse'
+        '400':
+          description: Token inválido o usuario sin email
+        '403':
+          description: El email autenticado no coincide con la invitación
+        '404':
+          description: Invitación no encontrada
+        '409':
+          description: Invitación no pendiente
+        '410':
+          description: Invitación expirada
         '500':
           description: Error interno
   /webhooks/whatsapp:
     get:
+      tags:
+        - Webhooks
       summary: Verificación del webhook (handshake Meta)
       parameters:
         - in: query
@@ -312,6 +603,8 @@ paths:
         '403':
           description: Token inválido
     post:
+      tags:
+        - Webhooks
       summary: Recibe y procesa mensajes entrantes de WhatsApp Cloud
       requestBody:
         description: Payload completo que envía Meta (se valida firma x-hub-signature-256 si se configura)
@@ -351,6 +644,19 @@ components:
         - uptime
         - version
     AuthTokenRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: usuario@dominio.test
+        password:
+          type: string
+          example: S3cr3t!
+      required:
+        - email
+        - password
+    AuthRegisterRequest:
       type: object
       properties:
         email:
@@ -408,6 +714,57 @@ components:
           anyOf:
             - $ref: '#/components/schemas/User'
             - type: 'null'
+    AuthRegisterResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        session:
+          anyOf:
+            - $ref: '#/components/schemas/Session'
+            - type: 'null'
+        user:
+          anyOf:
+            - $ref: '#/components/schemas/User'
+            - type: 'null'
+    AuthPasswordResetRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: usuario@dominio.test
+        redirectTo:
+          type: string
+          format: uri
+          example: https://tu-frontend.com/reset
+      required:
+        - email
+    AuthPasswordResetResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+    AuthPasswordUpdateRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          example: N3wP4ssw0rd!
+      required:
+        - password
+    AuthPasswordUpdateResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        user:
+          anyOf:
+            - $ref: '#/components/schemas/User'
+            - type: 'null'
     ProtectedMeResponse:
       type: object
       properties:
@@ -416,6 +773,44 @@ components:
           example: true
         user:
           $ref: '#/components/schemas/User'
+    PublicUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_sign_in_at:
+          type: string
+          format: date-time
+          nullable: true
+        email_confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+    PublicUserDetailResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/PublicUser'
     WhatsappWebhookResponse:
       type: object
       properties:
@@ -467,6 +862,32 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Conversation'
+            pagination:
+              $ref: '#/components/schemas/PaginationMeta'
+    PaginationMeta:
+      type: object
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 25
+        offset:
+          type: integer
+          minimum: 0
+          example: 0
+        total:
+          type: integer
+          minimum: 0
+          example: 124
+        hasMore:
+          type: boolean
+          example: true
+      required:
+        - limit
+        - offset
+        - total
+        - hasMore
     ConversationDetailResponse:
       type: object
       properties:
@@ -496,18 +917,15 @@ components:
                   type: string
                 phone_number_id:
                   type: string
-                access_token:
-                  type: string
-                  nullable: true
                 graph_version:
                   type: string
                   nullable: true
-                verify_token:
-                  type: string
-                  nullable: true
-                meta_app_secret:
-                  type: string
-                  nullable: true
+                has_access_token:
+                  type: boolean
+                has_verify_token:
+                  type: boolean
+                has_meta_app_secret:
+                  type: boolean
                 created_at:
                   type: string
                   format: date-time
@@ -670,3 +1088,120 @@ components:
       required:
         - supabaseUserId
         - role
+    TenantInvitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - tenant_admin
+            - agent
+            - viewer
+        status:
+          type: string
+          enum:
+            - pending
+            - accepted
+            - revoked
+            - expired
+        invited_by:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tenant_id
+        - email
+        - role
+        - status
+        - invited_by
+        - expires_at
+        - created_at
+    TenantInvitationCreateRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - tenant_admin
+            - agent
+            - viewer
+          default: agent
+        expiresInHours:
+          type: integer
+          minimum: 1
+          maximum: 336
+          default: 72
+      required:
+        - email
+    TenantInvitationResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            invitation:
+              $ref: '#/components/schemas/TenantInvitation'
+    TenantInvitationCreateResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            invitation:
+              $ref: '#/components/schemas/TenantInvitation'
+            inviteToken:
+              type: string
+              description: Token de un solo uso para compartir con el invitado
+    TenantInvitationListResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            invitations:
+              type: array
+              items:
+                $ref: '#/components/schemas/TenantInvitation'
+    TenantInvitationAcceptResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            member:
+              $ref: '#/components/schemas/TenantUser'
+            invitation:
+              $ref: '#/components/schemas/TenantInvitation'

@@ -1,171 +1,196 @@
 # WA Leads API
 
-[![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Express](https://img.shields.io/badge/Express-4.x-000000?logo=express&logoColor=white)](https://expressjs.com/)
-[![WhatsApp Cloud](https://img.shields.io/badge/WhatsApp%20Cloud-Webhook-25D366?logo=whatsapp&logoColor=white)](https://developers.facebook.com/docs/whatsapp)
+API para capturar leads por WhatsApp Cloud, persistir conversaciones en Supabase y responder con un árbol conversacional (texto, botones y listas).
 
-API/worker para automatizar la captura de leads vía WhatsApp Cloud, persistir la conversación y despachar respuestas (texto, botones y listas).
+## Características
 
----
+- Webhook de WhatsApp Cloud con validación HMAC opcional por tenant.
+- Motor de conversación basado en árbol con respuestas de texto, botones y listas.
+- Persistencia en Supabase: conversaciones, deduplicación, tenants, miembros y credenciales.
+- API protegida con JWT de Supabase.
+- OpenAPI + Swagger UI disponible en desarrollo.
 
-## 👀 Visión rápida
-
-```mermaid
-sequenceDiagram
-  participant WA as WhatsApp Cloud
-  participant API as WA Leads API
-  participant DB as Supabase
-
-  WA->>API: POST /webhooks/whatsapp (mensaje entrante)
-  API->>API: Validar firma HMAC (x-hub-signature-256)
-  API->>DB: Buscar conversación / deduplicar mensaje
-  API->>API: Procesar árbol (engine) y elegir respuesta
-  API->>DB: Guardar siguiente nodo + respuestas
-  API-->>WA: Enviar texto | botones | lista
-  API->>DB: Marcar handoff si corresponde
-```
-
-Estructura del árbol conversacional (simplificada):
-
-```text
-start (texto) -> list/buttons -> next -> ... -> end (handoff opcional)
-```
-
-## 🚀 Cómo correrlo
-
-### Prerrequisitos
+## Requisitos
 
 - Node.js 20+
-- Cuenta y app de WhatsApp Cloud (token y verify token)
-- Proyecto Supabase (url + service role key)
+- Proyecto Supabase (URL, Service Role Key y Anon Key)
+- Credenciales de WhatsApp Cloud (phone number id, access token, verify token, app secret)
 
-### Instalación
+## Instalación
 
 ```bash
 npm install
 ```
 
-### Variables de entorno
-
-| Variable | Descripción |
-| --- | --- |
-| `PORT` | Puerto del servidor (default 3000) |
-| `LOG_LEVEL` | fatal \| error \| warn \| info \| debug \| trace \| silent |
-| `WHATSAPP_ACCESS_TOKEN` | Token de acceso de WhatsApp Cloud (fallback) |
-| `WHATSAPP_GRAPH_VERSION` | Versión de la API (ej. v22.0) |
-| `SUPABASE_URL` | URL del proyecto Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service Role key de Supabase |
-| `SUPABASE_ANON_KEY` | Anon key para firmar sesiones de usuarios (API pública) |
-
-Coloca estas llaves en un `.env` (no se versiona); también puedes copiar `.env.example` como punto de partida.
-
-### Configuración dinámica de Meta
-
-Los tokens de verificación (`verify_token`) y los secretos HMAC (`meta_app_secret`) ahora se guardan en la tabla `tenant_whatsapp`, así cada negocio puede usar sus propias claves. Si quieres controlar estas credenciales sin redeployar puedes:
-
-1. Usar `POST /api/tenants/:tenantId/whatsapp` y enviar `verifyToken`/`metaAppSecret` junto con los campos de WhatsApp.
-2. O bien ejecutar SQL directamente, por ejemplo:
-
-```sql
-insert into tenant_whatsapp (tenant_id, phone_number_id, verify_token, meta_app_secret, access_token)
-values ('...tenant uuid...', '...phone id...', 'token', 'secret', 'token value')
-on conflict (phone_number_id) do update
-set verify_token = excluded.verify_token,
-    meta_app_secret = excluded.meta_app_secret,
-    access_token = excluded.access_token,
-    updated_at = now();
-```
-
-El endpoint `/webhooks/whatsapp` validará el `hub.verify_token` contra ese valor y usará el `meta_app_secret` almacenado cuando procese mensajes entrantes.
-
-### Desarrollo
+## Ejecución
 
 ```bash
 npm run dev
 ```
 
-Abre `http://localhost:3000/health` para revisar el estado.
-
-### Build y lint
+Producción:
 
 ```bash
 npm run build
-npm run lint        # solo chequeo
-npm run lint:fix    # con autofix
-npm run format      # Prettier
+npm start
 ```
 
-### Docker
+## Variables de entorno
+
+| Variable | Descripción |
+| --- | --- |
+| `NODE_ENV` | `development` \| `test` \| `production` (default `development`) |
+| `PORT` | Puerto del servidor (default 3000) |
+| `LOG_LEVEL` | `fatal` \| `error` \| `warn` \| `info` \| `debug` \| `trace` \| `silent` |
+| `WHATSAPP_GRAPH_VERSION` | Versión de la API (default `v24.0`) |
+| `SUPABASE_URL` | URL del proyecto Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service Role Key de Supabase |
+| `SUPABASE_ANON_KEY` | Anon Key de Supabase (para login con email/password) |
+
+Crea un `.env` con estos valores o copia `.env.example` como base.
+
+Ejemplo `.env.example` actual:
+
+```bash
+NODE_ENV=development
+PORT=3000
+LOG_LEVEL=info
+WHATSAPP_GRAPH_VERSION=v24.0
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SUPABASE_ANON_KEY=your_anon_key
+```
+
+Nota: el backend también soporta `WHATSAPP_ACCESS_TOKEN` como fallback si el tenant no tiene token propio, pero no está en `.env.example`.
+
+## Base de datos (Supabase)
+
+Ejecuta `schema.sql` en el editor SQL de Supabase para crear las tablas y extensiones necesarias.
+
+Tablas principales:
+
+- `tenants`
+- `tenant_whatsapp`
+- `tenant_trees`
+- `tenant_users`
+- `conversations`
+- `wa_inbound_dedupe`
+
+## Flujo de configuración inicial
+
+1. Ejecuta el esquema en Supabase (`schema.sql`).
+2. Registra un usuario con `POST /auth/register` (o créalo directamente en Supabase Auth).
+3. Inicia sesión con `POST /auth/sessions` para obtener el JWT.
+4. Crea un tenant con `POST /api/v1/tenants` (puedes repetirlo para múltiples negocios).
+5. Configura las credenciales de WhatsApp con `POST /api/v1/tenants/:tenantId/whatsapp`.
+6. Registra el webhook de WhatsApp Cloud apuntando a `/webhooks/whatsapp`.
+7. (Opcional) Define un árbol personalizado con `PUT /api/v1/tenants/:tenantId/tree`.
+
+## Webhook de WhatsApp
+
+- `GET /webhooks/whatsapp` valida el `hub.verify_token` contra el `verify_token` almacenado en `tenant_whatsapp`.
+- `POST /webhooks/whatsapp` procesa mensajes entrantes y envía respuestas según el árbol configurado.
+- Si el tenant tiene `meta_app_secret`, se valida el header `x-hub-signature-256`. Si no existe, no se valida firma.
+- El `access_token` se toma del tenant; si no está definido, usa `WHATSAPP_ACCESS_TOKEN` como fallback.
+
+## Árbol conversacional
+
+El árbol por defecto vive en `src/bot/tree.ts`. Cada nodo define el tipo de respuesta y la transición. El API expone `GET /api/v1/tenants/:tenantId/tree` para consultarlo y `PUT /api/v1/tenants/:tenantId/tree` para guardarlo.
+
+Ejemplo de estructura básica:
+
+```json
+{
+  "tree": {
+    "nodes": {
+      "start": {
+        "type": "list",
+        "body": "¿Qué te interesa?",
+        "saveAs": "service",
+        "options": [
+          { "id": "rent", "title": "Renta", "next": "date" }
+        ]
+      },
+      "date": {
+        "type": "text",
+        "body": "¿Para qué fecha lo necesitas?",
+        "saveAs": "date",
+        "next": "done"
+      },
+      "done": {
+        "type": "end",
+        "body": "Gracias. Te contactamos pronto."
+      }
+    }
+  }
+}
+```
+
+Requisitos del árbol:
+
+- Debe existir el nodo `start`.
+- Todos los `next` deben apuntar a nodos válidos.
+- Tipos soportados: `text`, `list`, `buttons`, `end`.
+
+## Endpoints
+
+Públicos:
+
+- `GET /health` estado del servicio.
+- `GET /privacy` aviso de privacidad.
+- `POST /auth/register` registro con email/password (Supabase).
+- `POST /auth/sessions` login con email/password (Supabase).
+- `POST /auth/token` (deprecated, alias temporal de `/auth/sessions`).
+- `GET /webhooks/whatsapp` verificación de webhook.
+- `POST /webhooks/whatsapp` entrada de mensajes.
+
+Protegidos (Bearer JWT de Supabase, versión actual `/api/v1`; `/api` queda como alias temporal deprecado):
+
+- `GET /api/v1/me` datos del usuario autenticado.
+- `GET /api/v1/users/:uid` obtiene información pública de un usuario por UID.
+- `POST /api/v1/tenants` crea un tenant y asigna `tenant_admin` al creador.
+- `GET /api/v1/tenants/:tenantId/conversations` lista conversaciones del tenant.
+  Respuesta incluye `data.pagination` con `limit`, `offset`, `total`, `hasMore`.
+- `GET /api/v1/tenants/:tenantId/conversations/:slug` obtiene una conversación por slug.
+- `GET /api/v1/tenants/:tenantId/whatsapp` consulta credenciales del tenant.
+- `POST /api/v1/tenants/:tenantId/whatsapp` crea o actualiza credenciales del tenant.
+- `GET /api/v1/tenants/:tenantId/tree` obtiene el árbol del tenant.
+- `PUT /api/v1/tenants/:tenantId/tree` crea o actualiza el árbol del tenant.
+- `GET /api/v1/tenants/:tenantId/members` lista miembros del tenant.
+- `POST /api/v1/tenants/:tenantId/members` agrega o actualiza miembros.
+
+Documentación OpenAPI:
+
+- `GET /docs` solo en `NODE_ENV=development`.
+- El archivo fuente es `openapi.yaml`.
+
+## Roles
+
+- `tenant_admin`: administra credenciales, árbol y miembros.
+- `agent`: puede listar miembros y ver conversaciones.
+- `viewer`: lectura de conversaciones.
+
+## Pruebas locales del webhook
+
+1. Expón tu servidor con `ngrok` o `cloudflared`.
+2. Configura el callback en Meta con la URL `/webhooks/whatsapp`.
+3. Envía un mensaje al número de prueba y revisa los logs.
+
+## Docker
 
 ```bash
 docker build -t wa-leads-api .
 docker run -p 3000:3000 --env-file .env wa-leads-api
 ```
 
-### Endpoints
+## Render
 
-- `GET /health` — simple healthcheck.
-- `GET /privacy` — aviso de privacidad en texto plano.
-- `GET /webhooks/whatsapp` — handshake de verificación (meta).
-- `POST /webhooks/whatsapp` — recibe mensajes entrantes, procesa y responde.
-- `GET /api/tenants/:tenantId/members` — lista miembros del tenant (requiere `tenant_admin`/`agent`).
-- `POST /api/tenants/:tenantId/members` — agrega o actualiza miembros con roles (`tenant_admin|agent|viewer`).
+El archivo `render.yaml` incluye el servicio web y variables base para despliegue.
 
-### Roles
+## Scripts útiles
 
-- `tenant_admin` controla la configuración del tenant (árbol, credenciales, miembros).
-- `agent` atiende conversaciones y ve miembros.
-- `viewer` solo accede a reportes/lectura (si lo implementas).
-- `GET /api/conversations` — listado de conversaciones (requiere JWT).
-- `GET /api/conversations/:slug` — detalles de una conversación (requiere tenantId + JWT).
-- `GET /api/tenants/:tenantId/whatsapp` — credenciales configuradas para el tenant (requiere JWT).
-- `POST /api/tenants` — crea un nuevo negocio/tenant y te asigna como `tenant_admin` automáticamente (requiere JWT).
-- `POST /api/tenants/:tenantId/whatsapp` — actualiza las credenciales de WhatsApp del tenant (requiere JWT).
-- `GET /api/tenants/:tenantId/conversations` — lista las conversaciones del tenant (paginado y protegido).
-- `GET /api/tenants/:tenantId/conversations/:slug` — detalles de una conversación por slug (validación por tenant).
-- `GET /api/tenants/:tenantId/tree` — obtiene el árbol conversacional configurado (requiere JWT).
-- `PUT /api/tenants/:tenantId/tree` — crea o actualiza el árbol personalizado de un tenant (requiere JWT).
-- `GET /docs` — documentación OpenAPI + Swagger UI (solo disponible en `NODE_ENV=development`).
-
-## 🧠 Arquitectura
-
-- `src/routes/whatsapp.ts` — Webhook, validación de firma, deduplicación, handoff.
-- `src/bot/engine.ts` — Motor de árbol conversacional.
-- `src/bot/tree.ts` — Definición del flujo (texto, listas, botones, end).
-- `src/repositories/*` — Persistencia (Supabase).
-- `src/lib/waSend.ts` — Cliente WhatsApp Cloud (texto/lista/botones).
-- `src/lib/slug.ts` — Generación de slugs únicos para leads.
-- `src/config/env.ts` — Validación de configuración con Zod.
-- `src/server.ts` — App Express + middlewares.
-
-## 🌳 Personalizar el árbol de conversación
-
-Edita `src/bot/tree.ts` para ajustar mensajes, opciones y el orden de nodos. Cada nodo puede:
-
-- `type`: `text` | `list` | `buttons` | `end`
-- `body`: texto a enviar
-- `options`: para `list/buttons`, con `id`, `title`, `next`
-- `saveAs`: clave para almacenar la respuesta en `answers`
-- `next`: siguiente nodo (en nodos de texto)
-
-## 🔐 Seguridad
-
--- Valida HMAC `x-hub-signature-256` con el `meta_app_secret` almacenado por tenant en `tenant_whatsapp`.
-- Deduplicación de mensajes para evitar reenvíos.
-- Handoff a humano cuando el nodo final lo marca.
-
-## 🧪 Probando el webhook localmente
-
-1. Usa `ngrok`/`cloudflared` para exponer `http://localhost:3000/webhooks/whatsapp`.
-2. Configura ese URL en el dashboard de WhatsApp Cloud.
-3. Envía mensajes de prueba desde tu número sandbox y revisa los logs.
-
-## 📦 Despliegue en Render
-
-- `render.yaml` incluye servicio web y variables/env.
-- `Dockerfile` genera una imagen lista para producción.
-
----
-
-¿Sugerencias o ajustes? Abre un issue o PR. ✨
+- `npm run dev` modo desarrollo.
+- `npm run build` compila TypeScript.
+- `npm start` inicia el servidor desde `dist/`.
+- `npm run lint` ejecuta ESLint.
+- `npm run format` aplica Prettier.
